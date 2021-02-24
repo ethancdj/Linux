@@ -1,0 +1,197 @@
+Mini install
+最小化安裝很多套件都沒裝，需自行安裝
+
+yum -y install net-tools wget bind-utils sysstat vim bash-completion setuptool ntsysv system-config-network-tui iptables system-config-securitylevel-tui
+
+#更新系統
+ yum -y update 
+
+
+###PS:centos7網路設定改為nmtui做設定##
+
+
+
+##手動設定static ip網路設定檔
+vim /etc/sysconfig/network-scripts/ifcfg-ens35
+
+TYPE=Ethernet
+BOOTPROTO=static
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+NAME=ens35
+UUID=b430ea4d-c11b-43fd-ba1b-c5c6bf25aa74
+DEVICE=ens35
+ONBOOT=yes
+IPADDR=192.168.111.128
+GATEWAY=192.168.111.1
+NETMASK=255.255.255.0
+
+##修改Hostname
+hostnamectl set-hostname wordpress.test.com
+
+##sshd.config登入設定
+#禁用root登入，及使用特定帳號才可登入
+vim /etc/ssh/sshd.config
+AllowUsers ethan
+PermitRootLogin no
+#######安裝 VMware Tools (適用於ESXi下的虛擬VM)
+
+    a.虛擬機(右鍵)--> Guset --> Install/Upgrade VMware Tools
+
+    b. # mount /dev/cdrom /media
+
+    c. # cd /media
+
+    d. # cp /media/VMwareTools-(按Tab鍵) /tmp
+
+    e. # cd /tmp
+
+    f. # tar zxvf VMwareTools-(按Tab鍵)
+
+    g. cd vmware-tools-distrib
+
+    h. # ./vmware-install.pl  (一直按 Enter ......)
+
+------------------------------------------------------
+
+#######Wordpress install
+yes
+##MariaDB 安裝
+#安裝MariaDB repo
+wget https://downloads.mariadb.com/MariaDB/mariadb_repo_setup
+chmod +x mariadb_repo_setup
+./mariadb_repo_setup
+
+#安裝MariaDB
+yum install MariaDB-server
+
+#啟動MariaDB
+systemctl start mariadb.service
+#開機後自動啟動MariaDB
+systemctl enable mariadb.service
+
+##設定MariaDB的root密碼
+mysql_secure_installation
+
+Enter current password for root (enter for none): 
+OK, successfully used password, moving on...
+
+Setting the root password or using the unix_socket ensures that nobody
+can log into the MariaDB root user without the proper authorisation.
+
+You already have your root account protected, so you can safely answer 'n'.
+
+Switch to unix_socket authentication [Y/n] 
+Enabled successfully!
+Reloading privilege tables..
+ ... Success!
+
+
+You already have your root account protected, so you can safely answer 'n'.
+
+Change the root password? [Y/n] y
+New password: 
+Re-enter new password: 
+Password updated successfully!
+Reloading privilege tables..
+ ... Success!
+
+
+By default, a MariaDB installation has an anonymous user, allowing anyone
+to log into MariaDB without having to have a user account created for
+them.  This is intended only for testing, and to make the installation
+go a bit smoother.  You should remove them before moving into a
+production environment.
+
+Remove anonymous users? [Y/n] y
+ ... Success!
+
+Normally, root should only be allowed to connect from 'localhost'.  This
+ensures that someone cannot guess at the root password from the network.
+
+Disallow root login remotely? [Y/n] y
+ ... Success!
+
+By default, MariaDB comes with a database named 'test' that anyone can
+access.  This is also intended only for testing, and should be removed
+before moving into a production environment.
+
+Remove test database and access to it? [Y/n] y
+ - Dropping test database...
+ ... Success!
+ - Removing privileges on test database...
+ ... Success!
+
+Reloading the privilege tables will ensure that all changes made so far
+will take effect immediately.
+
+Reload privilege tables now? [Y/n] y
+ ... Success!
+
+Cleaning up...
+
+All done!  If you've completed all of the above steps, your MariaDB
+installation should now be secure.
+
+Thanks for using MariaDB!
+
+###新增一個wordpress資料庫，以及新增一個wpadmin的管理者帳號
+mysql -u root -p
+CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+GRANT ALL ON wordpress.* TO 'wpadmin'@'localhost' IDENTIFIED BY 'change-with-strong-password';
+FLUSH PRIVILEGES;
+EXIT;
+
+###安裝PHP
+ yum install epel-release yum-utils 
+yum localinstall http://rpms.remirepo.net/enterprise/remi-release-7.rpm -y
+yum-config-manager --enable remi-php73 
+yum --enablerepo=remi-php73 install php 
+yum install php-cli php-fpm php-mysql php-json php-opcache php-mbstring php-xml php-gd php-curl php-mysqlnd
+
+##安裝apache
+ yum install httpd -y
+ systemctl start httpd
+ systemctl enable httpd
+ firewall-cmd --permanent --add-service=http
+ firewall-cmd --reload
+ 
+ ###下載 WordPress 安裝套件至/tmp
+ cd /tmp && wget https://tw.wordpress.org/wordpress-5.2.3-zh_TW.tar.gz
+ 
+ ###解壓縮套件至/var/www/html/
+  tar -zxvf wordpress-5.2.3-zh_TW.tar.gz -C /var/www/html/
+##調整chown
+chown -R apache:apache /var/www/html/wordpress/
+
+##為 WordPress 建立 Apache 的 Virtual Host
+vim /etc/httpd/conf.d/00-default-vhost.conf
+##內容如下##
+<Directory "/var/www/html">
+    Require all granted
+</Directory>
+
+<VirtualHost _default_:80>
+    ServerName    192.168.72.141
+    ServerAlias   lab.test.com
+    DocumentRoot  /var/www/html
+    CustomLog     "logs/default-vhost.log" combined
+</VirtualHost>
+
+
+#### 內容如下： ####
+<Directory "/var/www/html/wordpress">
+    Require all granted
+</Directory>
+
+<VirtualHost *:80>
+    ServerName    wordpress.lab.test.com
+    ServerAlias   wordpress
+    DocumentRoot  /var/www/html/wordpress
+    CustomLog     "logs/wordpress.log" combined
+</VirtualHost>
+
+##重啟httpd
+systemctl restart httpd
+
+##輸入http://myip/wordpress 開始進行安裝

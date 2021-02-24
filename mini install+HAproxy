@@ -1,0 +1,98 @@
+Centos 7 Mini install
+##最小化安裝很多套件都沒裝，需自行安裝
+yum -y install net-tools wget bind-utils sysstat vim bash-completion setuptool ntsysv system-config-network-tui iptables system-config-securitylevel-tui
+
+#更新系統
+ yum -y update 
+
+###PS:centos7網路設定改為nmtui做設定##
+
+
+##手動設定static ip網路設定檔
+vim /etc/sysconfig/network-scripts/ifcfg-ens35
+
+TYPE=Ethernet
+BOOTPROTO=static
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+NAME=ens35
+UUID=b430ea4d-c11b-43fd-ba1b-c5c6bf25aa74
+DEVICE=ens35
+ONBOOT=yes
+IPADDR=192.168.10.100
+GATEWAY=192.168.111.1
+NETMASK=255.255.255.0
+
+##修改Hostname
+hostnamectl set-hostname wordpress.test.com
+
+##sshd.config登入設定
+#禁用root登入，及使用特定帳號才可登入
+vim /etc/ssh/sshd.config
+AllowUsers ethan
+PermitRootLogin no
+#######安裝 VMware Tools (適用於ESXi下的虛擬VM)
+
+    a.虛擬機(右鍵)--> Guset --> Install/Upgrade VMware Tools
+
+    b. # mount /dev/cdrom /media
+
+    c. # cd /media
+
+    d. # cp /media/VMwareTools-(按Tab鍵) /tmp
+
+    e. # cd /tmp
+
+    f. # tar zxvf VMwareTools-(按Tab鍵)
+
+    g. cd vmware-tools-distrib
+
+    h. # ./vmware-install.pl  (一直按 Enter ......)
+	
+###haproxy安裝
+yum install haproxy
+
+##設定haproxy.cfg
+vim /etc/haproxy/haproxy.cfg
+
+global
+    log         127.0.0.1 local2
+
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     4000
+    user        haproxy
+    group       haproxy
+    daemon
+
+    stats socket /var/lib/haproxy/stats
+
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 3000
+frontend  main
+  bind *:80
+  mode http
+  default_backend httppool
+
+
+backend httppool
+    balance     roundrobin
+    server  repx01 192.168.10.101:80 check
+    server  repx02 192.168.10.102:80 check
+   # server   web2 192.168.111.253:80 check
+

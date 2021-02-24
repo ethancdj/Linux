@@ -1,0 +1,149 @@
+Centos 7 Mini install
+##最小化安裝很多套件都沒裝，需自行安裝
+yum -y install net-tools wget bind-utils sysstat vim bash-completion setuptool ntsysv system-config-network-tui iptables system-config-securitylevel-tui
+
+#更新系統
+ yum -y update 
+
+###PS:centos7網路設定改為nmtui做設定##
+
+
+##手動設定static ip網路設定檔
+vim /etc/sysconfig/network-scripts/ifcfg-ens35
+
+TYPE=Ethernet
+BOOTPROTO=static
+DEFROUTE=yes
+IPV4_FAILURE_FATAL=no
+NAME=ens35
+UUID=b430ea4d-c11b-43fd-ba1b-c5c6bf25aa74
+DEVICE=ens35
+ONBOOT=yes
+IPADDR=192.168.10.100
+GATEWAY=192.168.111.1
+NETMASK=255.255.255.0
+
+##修改Hostname
+hostnamectl set-hostname wordpress.test.com
+
+##sshd.config登入設定
+#禁用root登入，及使用特定帳號才可登入
+vim /etc/ssh/sshd.config
+AllowUsers ethan
+PermitRootLogin no
+#######安裝 VMware Tools (適用於ESXi下的虛擬VM)
+
+    a.虛擬機(右鍵)--> Guset --> Install/Upgrade VMware Tools
+
+    b. # mount /dev/cdrom /media
+
+    c. # cd /media
+
+    d. # cp /media/VMwareTools-(按Tab鍵) /tmp
+
+    e. # cd /tmp
+
+    f. # tar zxvf VMwareTools-(按Tab鍵)
+
+    g. cd vmware-tools-distrib
+
+    h. # ./vmware-install.pl  (一直按 Enter ......)
+	
+
+###nginx反向代理安裝
+yum install nginx
+#編輯設定檔/etc/nginx/conf.d/default.conf
+vim /etc/nginx/conf.d/default.conf
+##內容如下
+server{
+    listen 80;
+    server_name 192.168.10.100;
+    location / {
+
+        # 後端的 Web Server, 即真實伺服器:
+        proxy_pass http://192.168.10.103:80;
+
+        # 定義 header 變數, 記錄使用者的 IP
+        proxy_set_header X-Real-IP $remote_addr;
+
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_max_temp_file_size 0;
+    }
+}
+
+
+#####安裝keepalived 叢集
+yum install keepalived
+
+#編輯/etc/keepalived/keepalived.conf設定檔
+##內容如下
+! Configuration File for keepalived
+
+global_defs {
+   notification_email {
+     sysadmin@firewall.loc
+   }
+   notification_email_from Alexandre.Cassen@firewall.loc
+   smtp_server 192.168.200.1
+   smtp_connect_timeout 30
+   router_id LVS_DEVEL
+   vrrp_skip_check_adv_addr
+   vrrp_strict
+   vrrp_garp_interval 0
+   vrrp_gna_interval 0
+}
+
+vrrp_instance VI_1 {
+    state MASTER
+    interface ens36
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    mcast_src_ip 192.168.10.101
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        192.168.10.253/24
+    }
+}
+
+virtual_server 192.168.10.253 80 {
+    ! 健康檢查的時間間隔
+    delay_loop 6
+    ! 負載均衡演算法
+    lb_algo wlc
+    ! LVS模式，支援NAT/DR/TUN模式
+    lb_kind DR
+    protocol TCP
+    nat_mask 255.255.255.0
+
+    ! 真實Web伺服器IP，埠
+    real_server 192.168.10.101 80 {
+        weight 3
+        ! Web服務健康檢查
+        HTTP_GET {
+            url {
+                path /
+                status_code 200
+            }
+           connect_timeout 1
+        }
+    }
+! 真實Web伺服器IP，埠
+    real_server 192.168.10.102 80 {
+        weight 3
+        ! Web服務健康檢查
+        HTTP_GET {
+            url {
+                path /
+                status_code 200
+            }
+           connect_timeout 1
+        }
+    }
+}
+
